@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Event Countdown</title>
+  <style>
+    :root{
+      --bg-dim: rgba(0,0,0,.35);
+      --glass: rgba(255,255,255,.08);
+      --accent: #7c5cff;
+      --text: #f6f7fb;
+      --muted: #cfd3e6;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+      background: #0b0f1a;
+      overflow-x: hidden;
+    }
+
+    /* Background & parallax */
+    .bg {
+      position: fixed; inset: 0;
+      background: radial-gradient(1200px 800px at 50% 30%, rgba(124,92,255,.12), transparent 60%), #0b0f1a;
+      filter: saturate(1.1);
+      z-index: -2;
+    }
+    .bg::after{
+      content:""; position:absolute; inset:0; background-size:cover; background-position:center; opacity:.5; transition: transform .2s ease-out;
+    }
+    .bg-dim { position: fixed; inset:0; background: var(--bg-dim); backdrop-filter: blur(2px); z-index: -1; }
+
+    header{
+      padding: clamp(16px, 2vw, 24px);
+      text-align:center;
+    }
+    .title {
+      font-weight: 800;
+      line-height: 1.15;
+      font-size: clamp(20px, 3.2vw + 12px, 42px);
+      letter-spacing: .2px;
+      margin: 10px auto 6px;
+      max-width: 1000px;
+      text-shadow: 0 6px 30px rgba(0,0,0,.5);
+    }
+    .subtitle{ color: var(--muted); font-size: clamp(12px, 1.4vw + 8px, 16px); }
+
+    /* Controls */
+    .panel {
+      width: min(1100px, 92vw);
+      margin: 14px auto 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 18px;
+      padding: 14px;
+      backdrop-filter: blur(8px) saturate(1.1);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; }
+    .field { flex: 1 1 220px; display:flex; flex-direction: column; gap:6px; }
+    label { font-size: 12px; color: var(--muted); letter-spacing:.4px; }
+    input[type="text"], input[type="datetime-local"], input[type="file"]{
+      appearance: none; width:100%; border-radius: 12px; border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06); color: var(--text); padding: 12px 14px;
+      outline: none; font-size: 14px;
+    }
+    input[type="file"]{ padding: 10px; }
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    button{
+      border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer; font-weight: 700;
+      background: linear-gradient(180deg, var(--accent), #5b3ef6);
+      color: white; box-shadow: 0 6px 22px rgba(124,92,255,.45);
+      transition: transform .06s ease, filter .2s ease;
+    }
+    button.secondary{ background: rgba(255,255,255,.06); color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); font-weight:600; }
+    button:active{ transform: translateY(1px) scale(.995); }
+
+    /* Countdown */
+    .countdown-wrap{
+      width: min(1100px, 92vw);
+      margin: 16px auto 44px;
+      display:grid; gap: 16px;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+    }
+    .card{
+      position:relative; text-align:center; padding: 26px 12px 18px; border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05));
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 12px 36px rgba(0,0,0,.28);
+    }
+    .label{ color: var(--muted); font-size: 12px; letter-spacing:.3px; margin-top: 6px; text-transform: uppercase; }
+    .num{
+      font-variant-numeric: tabular-nums; font-weight: 900; line-height: .95;
+      font-size: clamp(40px, 9vw, 110px);
+      text-shadow: 0 10px 30px rgba(0,0,0,.5);
+      letter-spacing: 1px;
+      display:inline-block;
+      transform-origin: bottom;
+      transition: transform .2s ease;
+    }
+    .num.tick { animation: pop .5s ease; }
+    @keyframes pop { 0%{ transform: translateY(0) scale(1); } 30%{ transform: translateY(-6px) scale(1.04);} 100%{ transform: translateY(0) scale(1);} }
+
+    /* Footer CTA */
+    .cta { text-align:center; margin: 8px 0 40px; }
+    .calendar-hint{ color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+    /* Responsive */
+    @media (max-width: 720px){
+      .countdown-wrap{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg" id="bg"></div>
+  <div class="bg-dim"></div>
+
+  <header>
+    <h1 class="title" id="title">my Friend Bidou's birthday on this Friday 15th a 6pm at Bar Mamie.</h1>
+    <div class="subtitle" id="subtitle">Customize details below — the countdown updates live.</div>
+  </header>
+
+  <section class="panel" aria-label="Event controls">
+    <div class="row">
+      <div class="field">
+        <label for="name">Event name</label>
+        <input id="name" type="text" value="Friend Bidou's Birthday" />
+      </div>
+      <div class="field">
+        <label for="dt">Date & time</label>
+        <input id="dt" type="datetime-local" />
+      </div>
+      <div class="field">
+        <label for="loc">Location</label>
+        <input id="loc" type="text" value="Bar Mamie" />
+      </div>
+      <div class="field">
+        <label for="bgfile">Background image</label>
+        <input id="bgfile" type="file" accept="image/*" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="apply">Apply changes</button>
+      <button id="reset" class="secondary">Reset to default</button>
+    </div>
+  </section>
+
+  <main class="countdown-wrap" aria-live="polite">
+    <div class="card">
+      <div class="num" id="days">00</div>
+      <div class="label">Days</div>
+    </div>
+    <div class="card">
+      <div class="num" id="hours">00</div>
+      <div class="label">Hours</div>
+    </div>
+    <div class="card">
+      <div class="num" id="mins">00</div>
+      <div class="label">Minutes</div>
+    </div>
+    <div class="card">
+      <div class="num" id="secs">00</div>
+      <div class="label">Seconds</div>
+    </div>
+  </main>
+
+  <div class="cta">
+    <button id="saveCal">Save to Calendar</button>
+    <div class="calendar-hint">Generates an .ics file compatible with Outlook, Google Calendar, and Apple Calendar.</div>
+  </div>
+
+  <script>
+    // ---------- Utilities ----------
+    const $ = (sel) => document.querySelector(sel);
+    const pad = (n) => String(n).padStart(2, '0');
+
+    // Default event: Fri, Aug 15, 2025 18:00 local
+    function defaultDateTimeLocal(){
+      const d = new Date(2025, 7, 15, 18, 0, 0); // months 0-indexed; 7 = August
+      const off = d.getTimezoneOffset();
+      const localISO = new Date(d.getTime() - off*60000).toISOString().slice(0,16);
+      return localISO;
+    }
+
+    // State
+    let state = {
+      name: "Friend Bidou's Birthday",
+      dt: new Date(2025, 7, 15, 18, 0, 0),
+      loc: "Bar Mamie",
+      bg: null
+    };
+
+    // Initialize inputs
+    $('#dt').value = defaultDateTimeLocal();
+
+    // Apply / Reset
+    $('#apply').addEventListener('click', () => {
+      const name = $('#name').value.trim() || "Event";
+      const loc = $('#loc').value.trim();
+      const dtStr = $('#dt').value;
+      const dt = dtStr ? new Date(dtStr) : new Date();
+      state = { ...state, name, dt, loc };
+      $('#title').textContent = `${name} — ${state.dt.toLocaleString()} @ ${loc}`;
+      tick(true);
+    });
+
+    $('#reset').addEventListener('click', () => {
+      state = { name: "Friend Bidou's Birthday", dt: new Date(2025,7,15,18,0,0), loc: "Bar Mamie", bg: null };
+      $('#name').value = state.name;
+      $('#loc').value = state.loc;
+      $('#dt').value = defaultDateTimeLocal();
+      $('#title').textContent = "my Friend Bidou's birthday on this Friday 15th a 6pm at Bar Mamie.";
+      setBgImage(null);
+      tick(true);
+    });
+
+    // Background upload -> parallax
+    const bgEl = document.getElementById('bg');
+    function setBgImage(url){
+      const layer = bgEl; // use ::after via style property
+      layer.style.setProperty('--hasbg', url ? 1 : 0);
+      layer.style.setProperty('--bgurl', url || '');
+      layer.style.setProperty('--bgposx', '50%');
+      layer.style.setProperty('--bgposy', '50%');
+      layer.style.setProperty('--bgscale', '1.06');
+      layer.style.setProperty('--bgop', '.6');
+      layer.style.cssText = `position:fixed;inset:0;`;
+      layer.style.setProperty('background', layer.style.background);
+      // apply to ::after using CSS text via styleSheet is complex; instead fake it with inner div
+      if(!layer._img){
+        const img = document.createElement('div');
+        img.style.position='absolute'; img.style.inset='0';
+        img.style.backgroundSize='cover'; img.style.backgroundPosition='center';
+        img.style.opacity='.55'; img.style.transition='transform .2s ease-out';
+        layer.appendChild(img); layer._img = img;
+      }
+      layer._img.style.backgroundImage = url ? `url(${url})` : 'none';
+    }
+
+    $('#bgfile').addEventListener('change', (e)=>{
+      const f = e.target.files && e.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = (ev)=>{ setBgImage(ev.target.result); state.bg = ev.target.result; };
+      reader.readAsDataURL(f);
+    });
+
+    // Parallax (subtle)
+    window.addEventListener('mousemove', (e)=>{
+      const img = bgEl._img; if(!img) return;
+      const { innerWidth:w, innerHeight:h } = window;
+      const dx = (e.clientX - w/2) / w; // -0.5..0.5
+      const dy = (e.clientY - h/2) / h;
+      img.style.transform = `scale(1.08) translate(${dx*10}px, ${dy*10}px)`;
+    });
+    window.addEventListener('scroll', ()=>{
+      const img = bgEl._img; if(!img) return;
+      const y = window.scrollY;
+      img.style.transform = `scale(1.08) translateY(${y * -0.03}px)`;
+    }, {passive:true});
+
+    // Countdown logic
+    const parts = { days: $('#days'), hours: $('#hours'), mins: $('#mins'), secs: $('#secs') };
+    const prev = { days: null, hours: null, mins: null, secs: null };
+
+    function compute(){
+      const now = new Date();
+      let diff = Math.max(0, state.dt.getTime() - now.getTime());
+      const days = Math.floor(diff / (1000*60*60*24)); diff -= days*86400000;
+      const hours = Math.floor(diff / (1000*60*60)); diff -= hours*3600000;
+      const mins = Math.floor(diff / (1000*60)); diff -= mins*60000;
+      const secs = Math.floor(diff / 1000);
+      return { days, hours, mins, secs };
+    }
+
+    function setNum(el, val, key, force){
+      const str = pad(val);
+      if(force || prev[key] !== str){
+        el.textContent = str;
+        el.classList.remove('tick');
+        // trigger reflow for animation restart
+        void el.offsetWidth;
+        el.classList.add('tick');
+        prev[key] = str;
+      }
+    }
+
+    function tick(force=false){
+      const t = compute();
+      setNum(parts.days, t.days, 'days', force);
+      setNum(parts.hours, t.hours, 'hours', force);
+      setNum(parts.mins, t.mins, 'mins', force);
+      setNum(parts.secs, t.secs, 'secs', force);
+    }
+
+    setInterval(()=>tick(false), 1000);
+    tick(true);
+
+    // Save to Calendar (.ics)
+    function toICSDateUTC(date){
+      const y = date.getUTCFullYear();
+      const m = pad(date.getUTCMonth()+1);
+      const d = pad(date.getUTCDate());
+      const H = pad(date.getUTCHours());
+      const M = pad(date.getUTCMinutes());
+      const S = pad(date.getUTCSeconds());
+      return `${y}${m}${d}T${H}${M}${S}Z`;
+    }
+
+    function makeICS(){
+      const start = state.dt;
+      const end = new Date(start.getTime() + 2*60*60*1000); // +2h default
+      const dtstamp = new Date();
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Live Countdown//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"@countdown")}`,
+        `DTSTAMP:${toICSDateUTC(dtstamp)}`,
+        `DTSTART:${toICSDateUTC(start)}`,
+        `DTEND:${toICSDateUTC(end)}`,
+        `SUMMARY:${state.name.replace(/\n/g,' ')}`,
+        `LOCATION:${(state.loc||'').replace(/\n/g,' ')}`,
+        'DESCRIPTION:Created with the Live Event Countdown',
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+      return new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    }
+
+    $('#saveCal').addEventListener('click', ()=>{
+      const blob = makeICS();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${state.name.replace(/[^a-z0-9\-\_]+/gi,'_')}.ics`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    });
+
+    // Set initial background (optional subtle gradient only); encourage user to upload
+    // Title already set per request.
+  </script>
+</body>
+</html>
